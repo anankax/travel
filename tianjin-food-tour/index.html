@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>天津两天一夜 · 美食漫游地图</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--red:#e6492d;--blue:#2563eb;--purple:#8b5cf6;--green:#10b981;--orange:#f59e0b;--ink:#1a1a1a;--muted:#6b7280;--paper:#faf9f6;--card:#fff;--line:#e5e7eb;--dark:#1f2937}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--paper);font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC",system-ui,sans-serif}
+
+.hero-banner{background:linear-gradient(135deg,#c2410c 0%,#b91c1c 50%,#7f1d1d 100%);color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px}
+.hero-banner h1{font-size:24px;margin:0 0 3px}.hero-banner .sub{font-size:12px;opacity:.85}
+.hero-stats{display:flex;gap:20px}.hero-stat{text-align:center}.hero-stat b{display:block;font-size:20px}.hero-stat span{font-size:10px;opacity:.75}
+.toggle-group{display:flex;gap:4px;background:#fff2;border-radius:999px;padding:3px}
+.toggle-group button{border:0;background:transparent;color:#fffc;padding:6px 14px;border-radius:999px;cursor:pointer;font-size:12px;transition:.15s}
+.toggle-group button.active{background:#fff;color:#b91c1c;font-weight:700}
+
+main{display:grid;grid-template-columns:1fr 480px;height:calc(100vh - 96px)}
+.map-panel{position:relative;min-width:0}#map{height:100%;width:100%;background:#e5e7eb}
+
+/* 图例 */
+.map-legend{position:absolute;z-index:500;left:12px;bottom:20px;display:flex;flex-direction:column;gap:6px;font-size:10px;background:#fffc;padding:8px 12px;border-radius:10px;box-shadow:0 2px 8px #0001}
+.legend-row{display:flex;align-items:center;gap:6px}
+.legend-line{width:22px;height:3px;border-radius:2px}
+
+/* 信息浮层 */
+.map-overlay{position:absolute;z-index:500;top:12px;left:12px;width:min(340px,calc(100%-24px));padding:14px 16px;background:#ffffffe8;border:1px solid #d1d5db;border-radius:14px;box-shadow:0 6px 24px #00000014;backdrop-filter:blur(8px)}
+.map-overlay .live-label{font-size:10px;color:var(--red);letter-spacing:.12em;font-weight:800}
+.map-overlay .live-name{font-size:20px;font-weight:800;margin:3px 0 5px;line-height:1.2}
+.map-overlay .live-detail{font-size:12px;color:var(--muted);line-height:1.5}
+.map-overlay .live-budget{display:flex;gap:16px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.map-overlay .live-budget span{font-size:12px;color:var(--muted)}.map-overlay .live-budget b{color:var(--ink)}
+
+/* 侧边栏 */
+.sidebar{background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-head{position:sticky;top:0;z-index:5;padding:12px 14px 8px;background:#fffb;border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.day-tabs{display:flex;gap:5px}.day-tabs button{border:1px solid var(--line);background:#fff;padding:7px 14px;border-radius:999px;cursor:pointer;font-size:12px;transition:.15s}
+.day-tabs button.active{background:var(--dark);border-color:var(--dark);color:#fff}
+.hint-text{font-size:11px;color:var(--muted);margin-top:7px}
+.sidebar-scroll{flex:1;overflow-y:auto;padding:6px 12px 20px}
+
+/* ===== 段卡片 ===== */
+.seg-card{padding:14px 14px 12px;margin:6px 0;border:1px solid var(--line);border-radius:14px;background:#fff;cursor:pointer;transition:.18s}
+.seg-card:hover{border-color:#d1d5db;box-shadow:0 4px 14px #0000000c;transform:translateY(-1px)}
+.seg-card.active{border-color:#fca5a5;box-shadow:0 0 0 2px #fecaca,0 6px 18px #00000010;background:#fffafa}
+.seg-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.seg-from,.seg-to{font-size:13px;font-weight:700;display:flex;align-items:center;gap:4px}
+.seg-arrow{color:var(--muted);font-size:11px;flex-shrink:0}
+.seg-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}
+.seg-badge{padding:3px 8px;border-radius:999px;font-size:10px;font-weight:700;white-space:nowrap}
+.badge-metro{background:#ede9fe;color:#6d28d9}.badge-walk{background:#d1fae5;color:#065f46}
+.badge-bike{background:#dbeafe;color:#1e40af}.badge-taxi{background:#fef3c7;color:#92400e}
+.seg-route-line{height:2px;border-radius:2px;margin:6px 0;opacity:.35}
+
+/* 导航详情（展开后） */
+.seg-detail{margin-top:10px;padding:12px;background:#fafafa;border-radius:10px;border:1px solid var(--line);display:none}
+.seg-card.active .seg-detail{display:block}
+.seg-detail .guide-title{font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.seg-detail .guide-body{font-size:14px;line-height:2;color:#374151}
+.seg-detail .guide-body b{color:var(--ink)}
+.seg-detail .guide-stats{display:flex;gap:16px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+
+.empty-state{padding:40px 20px;text-align:center;color:var(--muted)}
+
+/* Leaflet 永久名称标签 */
+.stop-label{background:transparent;border:0;box-shadow:none;font-size:10px;font-weight:700;color:#1f2937;white-space:nowrap;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 1px 3px #fff}
+.stop-label::before{display:none}
+
+.leaflet-popup-content{line-height:1.5;font-size:13px}.leaflet-popup-content a{color:var(--red)}
+
+@media(max-width:860px){
+  .hero-banner{padding:12px 14px}.hero-banner h1{font-size:18px}.hero-stats{gap:12px}.hero-stat b{font-size:16px}
+  main{grid-template-columns:1fr;display:block;height:auto}
+  .map-panel{height:45vh;min-height:360px}
+  .sidebar{border-left:0;border-top:1px solid var(--line);max-height:55vh}
+  .map-overlay{top:8px;left:8px;width:calc(100%-16px)}.map-overlay .live-name{font-size:17px}
+}
+</style>
+</head>
+<body>
+
+<div class="hero-banner">
+  <div>
+    <h1>🏮 天津两天一夜 · 美食漫游</h1>
+    <div class="sub">2026年7月4-5日 · 地铁为主 · 两人出行 · 人均¥390</div>
+  </div>
+  <div class="hero-stats">
+    <div class="hero-stat"><b>19</b><span>打卡点</span></div>
+    <div class="hero-stat"><b>17</b><span>段路程</span></div>
+    <div class="hero-stat"><b>¥529-609</b><span>全程预算</span></div>
+  </div>
+  <div class="toggle-group" id="dayFilter">
+    <button class="active" data-day="all">📅 全部</button>
+    <button data-day="0">🔴 Day 1</button>
+    <button data-day="1">🔵 Day 2</button>
+  </div>
+</div>
+
+<main>
+  <section class="map-panel">
+    <div id="map"></div>
+    <div class="map-legend">
+      <div class="legend-row"><span class="legend-line" style="background:var(--purple)"></span> 地铁</div>
+      <div class="legend-row"><span class="legend-line" style="background:var(--green)"></span> 步行</div>
+      <div class="legend-row"><span class="legend-line" style="background:var(--blue)"></span> 骑行</div>
+      <div class="legend-row"><span class="legend-line" style="background:var(--orange)"></span> 打车</div>
+    </div>
+    <div class="map-overlay" id="mapOverlay">
+      <div class="live-label">👆 点击右侧段卡片查看路线</div>
+      <div class="live-name" id="liveName">选择一段路程</div>
+      <div class="live-detail" id="liveDetail">地图上会只显示该段的路线，并自动放大到最佳视角</div>
+      <div class="live-budget">
+        <span>🚇 方式 <b id="liveMode">—</b></span>
+        <span>⏱️ 耗时 <b id="liveTime">—</b></span>
+        <span>💰 费用 <b id="liveCost">—</b></span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="day-tabs" id="sidebarTabs">
+        <button class="active" data-day="all">全部 17段</button>
+        <button data-day="0">Day 1 · 11段</button>
+        <button data-day="1">Day 2 · 6段</button>
+      </div>
+      <div class="hint-text" id="daySummary">点击任意段卡片 → 地图自动放大路线 + 显示详细导航指引</div>
+    </div>
+    <div class="sidebar-scroll" id="segList"></div>
+  </aside>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ========== 数据 ==========
+const TRIP_DATA = [
+  { date:'7月4日 周六', budget:{transit:29, food:84},
+    stops:[
+      {id:'d1s0',name:'天津西站',type:'transit',lat:39.1574,lng:117.1620,desc:'🚄 5:52到站 · 南出站口出',tag:'到达',icon:'🚄',time:'5:52'},
+      {id:'d1s1',name:'全季酒店(天津西站店)',type:'hotel',lat:39.1550,lng:117.1585,desc:'寄存行李 · ¥250-350/晚',tag:'住宿',icon:'🏨',time:'6:00',
+       navMode:'walk',navTime:'5分钟',navCost:0,
+       navGuide:'<b>🚶 步行5分钟</b><br>南出站口右转 → 西青道向西300米 → 复兴路交口即到'},
+      {id:'d1s2',name:'西北角早餐',type:'food',lat:39.1483,lng:117.1743,desc:'🫓 杨记煎饼¥11 + 🥘 大福来锅巴菜¥8+面茶¥6+老豆腐¥5',tag:'早餐',icon:'🥘',time:'6:30-7:00',food:'煎饼果子 · 锅巴菜 · 面茶 · 老豆腐',cost:25,
+       navMode:'taxi',navTime:'5分钟',navCost:10,
+       navGuide:'<b>🚗 打车（推荐）</b><br>复兴路 → 芥园道 → 西马路，5分钟·¥10<br><br><b>🚇 备选地铁</b><br>西站进→1号线(刘园方向)→西北角站，1站·3分钟·¥2'},
+      {id:'d1s3',name:'天津博物馆',type:'spot',lat:39.0840,lng:117.2060,desc:'🏛 免费需公众号预约 · 7:50到基本没人 · 游览1.5小时',tag:'景点',icon:'🏛',time:'7:50-9:30',cost:0,
+       navMode:'metro',navTime:'30分钟',navCost:3,
+       navGuide:'<b>🚇 地铁（推荐）</b><br>① 西北角站进 → <b>1号线</b>（财经大学方向）<br>② 乘6站到<b>下瓦房站</b>下车<br>③ 站内换乘<b>5号线</b>（李七庄南方向）<br>④ 乘2站到<b>文化中心站</b>下车<br>⑤ <b>J口</b>出站 → 步行5分钟到平江道62号'},
+      {id:'d1s4',name:'臻味斋(西北角店)',type:'food',lat:39.1472,lng:117.1734,desc:'🍲 ⭐4.6人均¥55 · 八珍豆腐¥58+红烧牛窝骨¥79+奶香全爆¥48 · 💡10:30到不排队',tag:'大餐',icon:'🍲',time:'10:30-11:45',food:'八珍豆腐 · 红烧牛窝骨 · 奶香全爆 · 锅塌三样',cost:55,
+       navMode:'metro',navTime:'30分钟',navCost:3,
+       navGuide:'<b>🚇 地铁返回</b><br>① 文化中心站进 → <b>5号线</b>（北辰科技园北方向）→ 下瓦房<br>② 换乘<b>1号线</b>（刘园方向）→ 西北角站<br>③ <b>C口</b>出站 → 步行2分钟到西马路欢庆楼底商'},
+      {id:'d1s5',name:'五大道·民园广场',type:'spot',lat:39.1096,lng:117.2007,desc:'🏛 洋楼建筑群 · 🚲 共享单车¥2/h穿行五条马路',tag:'景点',icon:'🏛',time:'12:10-14:30',cost:2,
+       navMode:'metro',navTime:'8分钟',navCost:2,
+       navGuide:'<b>🚇 地铁</b><br>西北角站进 → <b>1号线</b>（财经大学方向）→ <b>营口道站 B3口</b>出<br>乘4站·8分钟·¥2<br>出站沿南京路向西200米 → 右转河北路步行800米 → 民园广场'},
+      {id:'d1s6',name:'瓷房子',type:'spot',lat:39.1224,lng:117.1987,desc:'🏺 赤峰道 · ⚠️ 别买票¥50 门口拍照即可',tag:'景点',icon:'🏺',time:'14:30-14:45',cost:0,
+       navMode:'bike',navTime:'10分钟',navCost:2,
+       navGuide:'<b>🚲 骑行10分钟</b><br>沿河北路/新华路向北骑行 → 赤峰道右转即到'},
+      {id:'d1s7',name:'滨江道·西开教堂',type:'spot',lat:39.1275,lng:117.1938,desc:'⛪ 罗马式建筑免费参观 · 🛍 商业街逛街',tag:'景点',icon:'⛪',time:'14:45-16:00',
+       navMode:'walk',navTime:'7分钟',navCost:0,
+       navGuide:'<b>🚶 步行7分钟</b><br>赤峰道向西 → 南京路/滨江道'},
+      {id:'d1s8',name:'意式风情区',type:'spot',lat:39.1360,lng:117.1945,desc:'🏰 意式建筑群 · 桥上西洋雕塑拍照',tag:'景点',icon:'🏰',time:'16:00-16:25',
+       navMode:'walk',navTime:'25分钟',navCost:0,
+       navGuide:'<b>🚶 步行25分钟</b><br>和平路向北 → <b>北安桥</b>过海河（桥上西洋雕塑，拍照点！📸）→ 过桥即到'},
+      {id:'d1s9',name:'古文化街',type:'spot',lat:39.1426,lng:117.1893,desc:'🏮 民俗文化街 · 网红玻璃桥必拍照 · ⚠️ 街头人偶合影全收费',tag:'景点',icon:'🏮',time:'16:25-16:45',
+       navMode:'walk',navTime:'18分钟',navCost:0,
+       navGuide:'<b>🚶 步行18分钟</b><br>海河东路向北 → <b>金汤桥</b>过河（网红玻璃桥，必拍照！📸）→ 对岸即到'},
+      {id:'d1s10',name:'金刚桥·天津之眼',type:'spot',lat:39.1550,lng:117.1800,desc:'🎡 桥西侧拍天津之眼全景 · ⚠️ 别坐摩天轮¥100排队2h',tag:'景点',icon:'🎡',time:'17:00-17:20',cost:0,
+       navMode:'walk',navTime:'15分钟',navCost:0,
+       navGuide:'<b>🚶 步行15分钟</b><br>沿海河向北 → 狮子林桥 → 金刚桥 · 桥西侧是最佳拍照机位'},
+      {id:'d1s11',name:'返回全季酒店',type:'hotel',lat:39.1550,lng:117.1585,desc:'🏨 休息',tag:'住宿',icon:'🏨',time:'17:30+',
+       navMode:'taxi',navTime:'8分钟',navCost:12,
+       navGuide:'<b>🚗 打车</b><br>河北大街 → 西马路，8分钟·¥12<br><br><b>🚶 步行（消食）</b><br>沿西马路向南 → 西青道，25分钟'},
+    ]
+  },
+  { date:'7月5日 周日', budget:{transit:15, food:110},
+    stops:[
+      {id:'d2s0',name:'西北角早餐(Day2)',type:'food',lat:39.1488,lng:117.1750,desc:'🥘 大福来锅巴菜三件套¥15',tag:'早餐',icon:'🥘',time:'8:00-8:40',food:'锅巴菜 · 面茶 · 老豆腐',cost:15,
+       navMode:'taxi',navTime:'5分钟',navCost:10,
+       navGuide:'<b>🚗 打车</b><br>酒店 → 复兴路 → 芥园道 → 西马路，5分钟·¥10'},
+      {id:'d2s1',name:'南市食品街',type:'food',lat:39.1280,lng:117.1880,desc:'🥟 石头门坎素包 · 百年老字号19种素馅',tag:'美食',icon:'🥟',time:'9:20-10:30',food:'石头门坎素包(19种素馅)',cost:20,
+       navMode:'metro',navTime:'15分钟',navCost:2,
+       navGuide:'<b>🚇 地铁</b><br>西北角站进 → <b>1号线</b>（财经大学方向）→ <b>二纬路站 A口</b>出<br>乘2站·4分钟·¥2<br>出站沿南门外大街向南步行500米 → 南市食品街'},
+      {id:'d2s2',name:'滨江道步行街',type:'spot',lat:39.1260,lng:117.1950,desc:'🛍 逛街购物 · 名流茶馆相声(可选¥80)',tag:'逛街',icon:'🛍',time:'10:30-12:00',
+       navMode:'walk',navTime:'20分钟',navCost:0,
+       navGuide:'<b>🚶 步行20分钟</b><br>南门外大街 → 南京路 → 滨江道'},
+      {id:'d2s3',name:'陈傻子包子(滨江道)',type:'food',lat:39.1255,lng:117.1965,desc:'🥟 地道天津包子¥30 · 比狗不理实惠太多',tag:'午餐',icon:'🥟',time:'12:00-13:00',food:'猪肉大葱包 · 三鲜包 · 馄饨',cost:30,
+       navMode:'walk',navTime:'2分钟',navCost:0,
+       navGuide:'<b>🚶 步行2分钟</b><br>滨江道内步行即到'},
+      {id:'d2s4',name:'名流茶馆相声(新华路)',type:'spot',lat:39.1270,lng:117.1965,desc:'🎭 天津相声 · 可选¥80 · 新华路177号 · 约1.5小时',tag:'娱乐',icon:'🎭',time:'13:00-14:30',cost:80,
+       navMode:'walk',navTime:'5分钟',navCost:0,
+       navGuide:'<b>🚶 步行5分钟</b><br>滨江道沿新华路向北步行 → 新华路177号<br>💡 可选项目，不去就直接逛街'},
+      {id:'d2s5',name:'桂发祥十八街麻花',type:'food',lat:39.1258,lng:117.1940,desc:'🎁 散装¥30/斤 · 椒盐/什锦/冰糖 · 临走再买',tag:'伴手礼',icon:'🎁',time:'14:30-15:00',food:'十八街麻花(椒盐/什锦/冰糖)',cost:45,
+       navMode:'walk',navTime:'5分钟',navCost:0,
+       navGuide:'<b>🚶 步行5分钟</b><br>新华路向南 → 滨江道116号（或新华路159号）'},
+      {id:'d2s6',name:'天津西站',type:'transit',lat:39.1574,lng:117.1620,desc:'🚄 20:49发车 · 18:00前上地铁即可',tag:'返程',icon:'🚄',time:'17:30',
+       navMode:'metro',navTime:'15分钟',navCost:3,
+       navGuide:'<b>🚇 地铁</b><br>营口道站进 → <b>1号线</b>（刘园方向）→ <b>天津西站</b><br>乘7站·约15分钟·¥3<br>⚠️ 20:49发车，18:00前上地铁绰绰有余'},
+    ]
+  }
+];
+
+// ========== 全局状态 ==========
+let map, tileAmap, tileOsm, currentTile='amap', activeDay='all', activeSegId=null;
+let markers=[], activeRouteLayer=null, navCache={};
+
+const AMAP_TILE='https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+const OSM_TILE='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const OSRM_BASE='https://router.project-osrm.org';
+const CHINA_BOUNDS=L.latLngBounds([17.5,73.5],[53.6,135.1]);
+const PI=Math.PI,A=6378245.0,EE=0.006693421622965943;
+
+const ROUTE_STYLE={
+  walk:{color:'#10b981',weight:5,opacity:.85,dashArray:null,profile:'walking'},
+  bike:{color:'#3b82f6',weight:5,opacity:.85,dashArray:null,profile:'cycling'},
+  metro:{color:'#8b5cf6',weight:5,opacity:.9,dashArray:'12 8',profile:null},
+  taxi:{color:'#f59e0b',weight:5,opacity:.75,dashArray:'8 6',profile:'driving'},
+  default:{color:'#ef4444',weight:5,opacity:.7,dashArray:null,profile:'driving'}
+};
+
+// ========== GCJ-02 ==========
+function _tlat(x,y){let r=-100+2*x+3*y+.2*y*y+.1*x*y+.2*Math.sqrt(Math.abs(x));r+=(20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3;r+=(20*Math.sin(y*PI)+40*Math.sin(y/3*PI))*2/3;r+=(160*Math.sin(y/12*PI)+320*Math.sin(y*PI/30))*2/3;return r}
+function _tlng(x,y){let r=300+x+2*y+.1*x*x+.1*x*y+.1*Math.sqrt(Math.abs(x));r+=(20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3;r+=(20*Math.sin(x*PI)+40*Math.sin(x/3*PI))*2/3;r+=(150*Math.sin(x/12*PI)+300*Math.sin(x/30*PI))*2/3;return r}
+function wgs2gcj(lng,lat){if(lng<72.004||lng>137.8347||lat<0.8293||lat>55.8271)return[lng,lat];let dLat=_tlat(lng-105,lat-35),dLng=_tlng(lng-105,lat-35);const r=lat/180*PI,m=Math.sin(r),s=Math.sqrt(1-EE*m*m);dLat=dLat*180/((A*(1-EE))/(s*s)*PI);dLng=dLng*180/((A/s)*Math.cos(r)*PI);return[lng+dLng,lat+dLat]}
+
+// ========== 地图 ==========
+function initMap(){
+  map=L.map('map',{zoomControl:false}).setView([39.13,117.18],12);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  tileAmap=L.tileLayer(AMAP_TILE,{maxZoom:18,maxNativeZoom:18,subdomains:['1','2','3','4'],attribution:'© 高德'});
+  tileOsm=L.tileLayer(OSM_TILE,{maxZoom:19,subdomains:['a','b','c'],attribution:'© OSM'});
+  tileAmap.addTo(map);
+}
+function isAmapMode(){return currentTile==='amap'}
+function toLeaflet(lng,lat){return isAmapMode()?[wgs2gcj(lng,lat)[1],wgs2gcj(lng,lat)[0]]:[lat,lng]}
+
+// ========== 段数据 ==========
+function getAllSegs(){
+  const segs=[];
+  TRIP_DATA.forEach((day,di)=>{
+    for(let i=0;i<day.stops.length-1;i++){
+      segs.push({id:`seg-d${di}-${i}`,dayIndex:di,from:day.stops[i],to:day.stops[i+1]});
+    }
+  });
+  return segs;
+}
+
+// ========== OSRM ==========
+async function getOSRMRoute(from,to,profile='driving'){
+  const key=`${profile}:${from.lat},${from.lng}-${to.lat},${to.lng}`;
+  if(navCache[key])return navCache[key];
+  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),12000);
+  try{
+    const r=await fetch(`${OSRM_BASE}/route/v1/${profile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&steps=false`,{signal:ctrl.signal});
+    if(!r.ok)throw new Error(`OSRM ${r.status}`);
+    const d=await r.json();
+    if(d.code!=='Ok'||!d.routes[0])throw new Error('no route');
+    const result={distance:d.routes[0].distance,duration:d.routes[0].duration,coords:d.routes[0].geometry.coordinates};
+    navCache[key]=result;
+    return result;
+  }catch(e){console.warn('OSRM:',e.message);return null}
+  finally{clearTimeout(timer)}
+}
+
+// ========== 路线绘制 ==========
+function clearActiveRoute(){
+  if(activeRouteLayer){map.removeLayer(activeRouteLayer);activeRouteLayer=null}
+}
+
+async function drawSegment(seg){
+  clearActiveRoute();
+  activeRouteLayer=L.layerGroup().addTo(map);
+  const style=ROUTE_STYLE[seg.to.navMode]||ROUTE_STYLE.default;
+  let coords;
+
+  if(seg.to.navMode==='metro'){
+    coords=[toLeaflet(seg.from.lng,seg.from.lat),toLeaflet(seg.to.lng,seg.to.lat)];
+    const ml=(seg.from.lng+seg.to.lng)/2,ma=(seg.from.lat+seg.to.lat)/2;
+    const mp=toLeaflet(ml,ma);
+    L.circleMarker(mp,{radius:6,color:'#8b5cf6',fillColor:'#fff',fillOpacity:1,weight:3}).addTo(activeRouteLayer);
+  }else if(style.profile){
+    const route=await getOSRMRoute(seg.from,seg.to,style.profile);
+    if(route&&route.coords)coords=route.coords.map(([lng,lat])=>toLeaflet(lng,lat));
+  }
+  if(!coords)coords=[toLeaflet(seg.from.lng,seg.from.lat),toLeaflet(seg.to.lng,seg.to.lat)];
+
+  L.polyline(coords,{
+    color:style.color,weight:style.weight,opacity:style.opacity,
+    dashArray:style.dashArray,smoothFactor:2
+  }).addTo(activeRouteLayer);
+
+  // 自动放大
+  if(coords.length>=2){
+    map.fitBounds(L.latLngBounds(coords),{padding:[60,60],maxZoom:15,animate:true,duration:.8});
+  }
+}
+
+// ========== Marker（图标+名称标签）==========
+function drawMarkers(){
+  markers.forEach(m=>map.removeLayer(m));markers=[];
+  const visibleSegs=getAllSegs().filter(s=>activeDay==='all'||s.dayIndex===parseInt(activeDay));
+
+  // 收集所有涉及的stop（去重用）
+  const seen=new Set();
+  const stops=[];
+  visibleSegs.forEach(seg=>{
+    if(!seen.has(seg.from.id)){seen.add(seg.from.id);stops.push(seg.from);}
+    if(!seen.has(seg.to.id)){seen.add(seg.to.id);stops.push(seg.to);}
+  });
+
+  stops.forEach(s=>{
+    let lat=s.lat,lng=s.lng;
+    if(isAmapMode())[lng,lat]=wgs2gcj(lng,lat);
+    const color=s.dayIndex===0?'#e6492d':'#2563eb';
+    // 图标圆圈
+    const icon=L.divIcon({
+      className:'',
+      html:`<div style="width:36px;height:36px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;box-shadow:0 3px 10px #0003;border:2.5px solid #fff;cursor:pointer;transition:transform .15s" onmouseenter="this.style.transform='scale(1.18)'" onmouseleave="this.style.transform='scale(1)'">${s.icon}</div>`,
+      iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-18]
+    });
+    const m=L.marker([lat,lng],{icon}).addTo(map);
+    // 永久名称标签
+    m.bindTooltip(s.name,{permanent:true,direction:'bottom',offset:[0,22],className:'stop-label',opacity:.92});
+    m.bindPopup(`<b>${s.icon} ${s.name}</b><br><span style="font-size:12px;color:#6b7280">${s.tag} · ${s.time||''}</span><br><span style="font-size:12px">${s.desc}</span>`);
+    m.on('click',()=>{
+      // 点击标记：找到以该站为终点的段
+      const seg=visibleSegs.find(x=>x.to.id===s.id)||visibleSegs.find(x=>x.from.id===s.id);
+      if(seg)selectSeg(seg.id);
+    });
+    m.stopId=s.id;
+    markers.push(m);
+  });
+}
+
+// ========== 段卡片列表 ==========
+function renderSegList(){
+  const container=document.getElementById('segList');
+  const segs=getAllSegs().filter(s=>activeDay==='all'||s.dayIndex===parseInt(activeDay));
+  if(!segs.length){container.innerHTML='<div class="empty-state">没有匹配的路段</div>';return}
+
+  let lastDay=-1;
+  container.innerHTML=segs.map(seg=>{
+    const dayLabel=seg.dayIndex!==lastDay?`<div style="font-size:11px;font-weight:800;color:var(--muted);padding:10px 2px 4px;letter-spacing:.06em">📅 ${TRIP_DATA[seg.dayIndex].date}</div>`:'';
+    lastDay=seg.dayIndex;
+    const isActive=seg.id===activeSegId;
+    const mode=seg.to.navMode||'walk';
+    const badgeClass=mode==='metro'?'badge-metro':mode==='walk'?'badge-walk':mode==='bike'?'badge-bike':mode==='taxi'?'badge-taxi':'badge-walk';
+    const modeEmoji=mode==='metro'?'🚇':mode==='walk'?'🚶':mode==='bike'?'🚲':mode==='taxi'?'🚗':'🚶';
+    const modeLabel=mode==='metro'?'地铁':mode==='walk'?'步行':mode==='bike'?'骑行':mode==='taxi'?'打车':'步行';
+    const lineColor=ROUTE_STYLE[mode]?ROUTE_STYLE[mode].color:'#6b7280';
+    return `${dayLabel}
+    <div class="seg-card${isActive?' active':''}" data-sid="${seg.id}">
+      <div class="seg-header">
+        <span class="seg-from">${seg.from.icon} ${seg.from.name}</span>
+        <span class="seg-arrow">→</span>
+        <span class="seg-to">${seg.to.icon} ${seg.to.name}</span>
+      </div>
+      <div class="seg-meta">
+        <span class="seg-badge ${badgeClass}">${modeEmoji} ${modeLabel}</span>
+        <span>⏱️ ${seg.to.navTime||'—'}</span>
+        ${seg.to.navCost!==undefined?`<span>💰 ¥${seg.to.navCost}</span>`:''}
+      </div>
+      <div class="seg-route-line" style="background:${lineColor};${mode==='metro'?'border:1px dashed '+lineColor+';background:transparent':''}"></div>
+      <div class="seg-detail" id="detail-${seg.id}">
+        ${seg.to.navGuide?`
+          <div class="guide-title">${modeEmoji} ${modeLabel}路线指引</div>
+          <div class="guide-body">${seg.to.navGuide}</div>
+          <div class="guide-stats">
+            <span>⏱️ <b>${seg.to.navTime||'—'}</b></span>
+            ${seg.to.navCost!==undefined?`<span>💰 <b>¥${seg.to.navCost}</b></span>`:''}
+            <span>📍 <b>${seg.from.name}</b> → <b>${seg.to.name}</b></span>
+          </div>
+        `:'<div style="font-size:13px;color:var(--muted)">加载路线中…</div>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.seg-card').forEach(card=>{
+    card.addEventListener('click',e=>{
+      // 如果点击的是detail内的元素，不阻止
+      selectSeg(card.dataset.sid);
+    });
+  });
+}
+
+// ========== 选择段 ==========
+function selectSeg(sid){
+  activeSegId=sid;
+  const seg=getAllSegs().find(s=>s.id===sid);
+  if(!seg)return;
+
+  // 更新浮层
+  const modeEmoji={walk:'🚶',metro:'🚇',bike:'🚲',taxi:'🚗'};
+  const modeLabel={walk:'步行',metro:'地铁',bike:'骑行',taxi:'打车'};
+  document.getElementById('liveName').textContent=`${seg.from.name} → ${seg.to.name}`;
+  document.getElementById('liveDetail').textContent=seg.to.desc;
+  document.getElementById('liveMode').textContent=`${modeEmoji[seg.to.navMode]||''} ${modeLabel[seg.to.navMode]||''}`;
+  document.getElementById('liveTime').textContent=seg.to.navTime||'—';
+  document.getElementById('liveCost').textContent=seg.to.navCost!==undefined?`¥${seg.to.navCost}`:'—';
+
+  // 画路线（自动fitBounds）
+  drawSegment(seg);
+
+  // 更新侧边栏
+  renderSegList();
+  setTimeout(()=>{
+    const card=document.querySelector(`.seg-card[data-sid="${sid}"]`);
+    if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
+  },120);
+  document.getElementById('daySummary').textContent=`已选中：${seg.from.name} → ${seg.to.name} · 地图已自动放大`;
+}
+
+// ========== 事件 ==========
+document.getElementById('dayFilter').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  document.querySelectorAll('#dayFilter button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  activeDay=e.target.dataset.day;
+  document.querySelectorAll('#sidebarTabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`#sidebarTabs button[data-day="${activeDay}"]`)?.classList.add('active');
+  activeSegId=null;clearActiveRoute();drawMarkers();renderSegList();
+});
+document.getElementById('sidebarTabs').addEventListener('click',e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  document.querySelectorAll('#sidebarTabs button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  activeDay=e.target.dataset.day;
+  document.querySelectorAll('#dayFilter button').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`#dayFilter button[data-day="${activeDay}"]`)?.classList.add('active');
+  activeSegId=null;clearActiveRoute();drawMarkers();renderSegList();
+});
+
+// ========== 启动 ==========
+initMap();
+drawMarkers();
+renderSegList();
+</script>
+</body>
+</html>
